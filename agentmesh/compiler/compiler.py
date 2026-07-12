@@ -1,7 +1,7 @@
 """WorkflowCompiler — validates a task specification and builds an executable DAG.
 
 Usage:
-    compiler = WorkflowCompiler(known_tools={"http", "llm", "echo"})
+    compiler = WorkflowCompiler()           # uses default ToolRegistry
     graph = compiler.compile(task_specs)
     order = graph.get_execution_order()
 """
@@ -19,6 +19,9 @@ from agentmesh.compiler.validator import (
 )
 from agentmesh.schemas.workflow import TaskSpec
 
+# Sentinel — means "use the default registry"
+_USE_DEFAULT_REGISTRY = object()
+
 
 class WorkflowCompiler:
     """Compiles a list of ``TaskSpec`` into a ``WorkflowGraph``.
@@ -27,17 +30,24 @@ class WorkflowCompiler:
     1. Schema validation (field constraints, self-dependency).
     2. Duplicate task ID check.
     3. Missing dependency references.
-    4. Unknown tool names (optional — requires known_tools).
+    4. Unknown tool names (validated against ToolRegistry by default).
     5. Cycle detection (DFS on the constructed adjacency list).
 
     Args:
         known_tools: Optional set of tool names for validation.
-            When ``None``, tool-name validation is skipped.
-            Will be wired to ``ToolRegistry`` in Phase 3.
+            - ``None``  → skip tool validation entirely.
+            - omitted   → use ``default_registry.tool_names()`` automatically.
     """
 
-    def __init__(self, known_tools: set[str] | None = None) -> None:
-        self._known_tools = known_tools
+    def __init__(self, known_tools: set[str] | None = _USE_DEFAULT_REGISTRY) -> None:  # type: ignore[assignment]
+        self._known_tools_override = known_tools
+
+    def _resolve_known_tools(self) -> set[str] | None:
+        if self._known_tools_override is _USE_DEFAULT_REGISTRY:
+            # Lazy import to avoid circular imports at module load time
+            from agentmesh.tools.registry import default_registry
+            return default_registry.tool_names()
+        return self._known_tools_override  # type: ignore[return-value]
 
     def compile(self, tasks: list[TaskSpec]) -> WorkflowGraph:
         """Validate the task specs and build an executable DAG.
@@ -64,7 +74,7 @@ class WorkflowCompiler:
         errors.extend(validate_dependencies_exist(tasks))
 
         # 4. Tool names
-        errors.extend(validate_tool_names(tasks, self._known_tools))
+        errors.extend(validate_tool_names(tasks, self._resolve_known_tools()))
 
         # Build adjacency list for cycle detection
         # Edge: dependency → dependent (from_task must finish before to_task)

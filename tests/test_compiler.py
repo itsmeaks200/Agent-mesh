@@ -201,11 +201,26 @@ class TestUnknownTools:
         graph = compiler.compile(tasks)
         assert graph.node_count == 1
 
-    def test_no_whitelist_skips_tool_validation(self):
-        compiler = WorkflowCompiler()
+    def test_explicit_none_skips_tool_validation(self):
+        """Passing known_tools=None explicitly skips tool validation."""
+        compiler = WorkflowCompiler(known_tools=None)
         tasks = [_spec("A", tool="anything_goes")]
         graph = compiler.compile(tasks)
         assert graph.node_count == 1
+
+    def test_default_validates_against_registry(self):
+        """Default compiler rejects tools not in the registry."""
+        compiler = WorkflowCompiler()  # uses default_registry
+        tasks = [_spec("A", tool="anything_goes")]
+        with pytest.raises(UnknownToolError):
+            compiler.compile(tasks)
+
+    def test_default_accepts_builtin_tools(self):
+        """Default compiler accepts all built-in tool names."""
+        compiler = WorkflowCompiler()
+        tasks = [_spec("A", tool="echo"), _spec("B", tool="http", depends_on=["A"])]
+        graph = compiler.compile(tasks)
+        assert graph.node_count == 2
 
 
 # ── Schema Validation ────────────────────────────────────────────────────────
