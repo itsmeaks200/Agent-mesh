@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import JSON, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from agentmesh.main import create_app
@@ -23,6 +24,18 @@ test_session_factory = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+
+# SQLite does not support PostgreSQL JSONB — remap to plain JSON before DDL
+@event.listens_for(Base.metadata, "before_create")
+def _remap_jsonb_for_sqlite(target, connection, **kw):
+    if connection.dialect.name == "sqlite":
+        from sqlalchemy.dialects.postgresql import JSONB
+
+        for table in target.tables.values():
+            for column in table.columns:
+                if isinstance(column.type, JSONB):
+                    column.type = JSON()
 
 
 @pytest_asyncio.fixture(autouse=True)

@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agentmesh.compiler import CompilationError, MultipleCompilationErrors, WorkflowCompiler
 from agentmesh.persistence import get_db
 from agentmesh.persistence.repository import (
     create_workflow,
@@ -13,6 +14,8 @@ from agentmesh.persistence.repository import (
     list_workflows,
 )
 from agentmesh.schemas.workflow import (
+    CompileErrorDetail,
+    CompileResponse,
     ErrorResponse,
     TaskResponse,
     WorkflowCreateRequest,
@@ -60,6 +63,44 @@ def _workflow_to_response(workflow) -> WorkflowResponse:
         completed_at=workflow.completed_at,
         tasks=[_task_to_response(t) for t in workflow.tasks],
     )
+
+
+@router.post(
+    "/compile",
+    response_model=CompileResponse,
+    summary="Compile and validate a workflow",
+    description=(
+        "Validate a workflow specification and return the execution order "
+        "without persisting to the database. Use this to check for cycles, "
+        "missing dependencies, and other errors before creating a workflow."
+    ),
+)
+async def compile_workflow_endpoint(
+    request: WorkflowCreateRequest,
+):
+    """Compile a workflow spec into a DAG and return the validation result."""
+    compiler = WorkflowCompiler()
+    try:
+        graph = compiler.compile(request.tasks)
+        execution_order = graph.get_execution_order()
+        return CompileResponse(
+            valid=True,
+            execution_order=execution_order,
+            topological_sort=graph.topological_sort(),
+            total_tasks=graph.node_count,
+            total_levels=len(execution_order),
+            graph=graph.to_dict(),
+        )
+    except MultipleCompilationErrors as e:
+        return CompileResponse(
+            valid=False,
+            errors=[CompileErrorDetail(**err) for err in e.details["errors"]],
+        )
+    except CompilationError as e:
+        return CompileResponse(
+            valid=False,
+            errors=[CompileErrorDetail(code=e.code, message=e.message, details=e.details)],
+        )
 
 
 @router.post(
