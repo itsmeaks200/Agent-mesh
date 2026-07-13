@@ -21,6 +21,17 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
+    # Worker / Redis Streams (Phase 5)
+    execution_mode: str = "distributed"   # "distributed" (Redis Streams + workers) or "inprocess" (Phase 4 asyncio)
+    worker_concurrency: int = 4           # max concurrent tasks per worker
+    task_stream_key: str = "agentmesh:tasks"
+    result_stream_prefix: str = "agentmesh:results:"
+    dead_letter_stream_key: str = "agentmesh:dead-letter"
+    consumer_group: str = "workers"
+    task_stream_max_len: int = 10_000     # MAXLEN for the task stream
+    worker_heartbeat_interval: int = 10   # seconds between health updates
+    pending_claim_idle_ms: int = 60_000   # ms idle before XCLAIM reclaim
+
     # Gemini (Phase 6)
     gemini_api_key: str = ""
 

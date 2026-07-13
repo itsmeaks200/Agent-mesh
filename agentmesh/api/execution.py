@@ -9,9 +9,11 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agentmesh.config import get_settings
 from agentmesh.models.workflow import WorkflowStatus
 from agentmesh.persistence import get_db
 from agentmesh.persistence.repository import get_workflow, get_workflow_tasks
+from agentmesh.scheduler.coordinator import WorkflowCoordinator
 from agentmesh.scheduler.executor import WorkflowExecutor
 
 router = APIRouter(tags=["execution"])
@@ -99,12 +101,31 @@ async def workflow_status_endpoint(
 
 
 async def _run_in_background(workflow_id: uuid.UUID) -> None:
-    """Create a fresh DB session and run the executor.
+    """Create a fresh DB session and run the workflow to completion.
 
     This runs outside the request lifecycle — it gets its own session.
+
+    Two execution modes are supported, selected via ``settings.execution_mode``:
+      - ``"distributed"`` (default): dispatch tasks to Redis Streams and let
+        standalone worker processes (``python -m agentmesh.worker``) execute
+        them. Requires at least one worker to be running.
+      - ``"inprocess"``: run tasks directly in this process via asyncio
+        (Phase 4 behaviour) — handy for local development without workers.
     """
     from agentmesh.persistence import async_session_factory
 
+    settings = get_settings()
+
     async with async_session_factory() as db:
-        executor = WorkflowExecutor()
-        await executor.execute(workflow_id, db)
+        if settings.execution_mode == "distributed":
+            import redis.asyncio as aioredis
+
+            redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+            try:
+                coordinator = WorkflowCoordinator(redis_client)
+                await coordinator.execute(workflow_id, db)
+            finally:
+                await redis_client.close()
+        else:
+            executor = WorkflowExecutor()
+            await executor.execute(workflow_id, db)

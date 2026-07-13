@@ -20,6 +20,26 @@ services:
       - .:/app
     command: uvicorn agentmesh.main:app --host 0.0.0.0 --port 8000 --reload
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://agentmesh:agentmesh@postgres:5432/agentmesh
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: python -m agentmesh.worker
+    # Run several worker containers in parallel, e.g.:
+    #   docker compose up --scale worker=3
+
   postgres:
     image: postgres:16-alpine
     container_name: agentmesh-postgres
