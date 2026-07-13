@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agentmesh.models.task import Task, TaskResult, task_dependencies
+from agentmesh.models.task import Task, TaskResult, TaskStatus, task_dependencies
 from agentmesh.models.workflow import Workflow, WorkflowStatus
 from agentmesh.schemas.workflow import TaskSpec
 
@@ -134,3 +134,62 @@ async def delete_workflow(db: AsyncSession, workflow_id: uuid.UUID) -> bool:
     await db.delete(workflow)
     await db.flush()
     return True
+
+
+async def get_workflow_tasks(db: AsyncSession, workflow_id: uuid.UUID) -> list[Task]:
+    """Return all tasks for a workflow, ordered by creation time."""
+    stmt = select(Task).where(Task.workflow_id == workflow_id)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def update_task_status(
+    db: AsyncSession,
+    task_id: uuid.UUID,
+    status: TaskStatus,
+    error_message: str | None = None,
+) -> Task | None:
+    """Update a task's status and relevant timestamps."""
+    stmt = select(Task).where(Task.id == task_id)
+    result = await db.execute(stmt)
+    task = result.scalar_one_or_none()
+    if task is None:
+        return None
+
+    now = datetime.now(timezone.utc)
+    task.status = status
+
+    if status == TaskStatus.RUNNING and task.started_at is None:
+        task.started_at = now
+    elif status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
+        task.completed_at = now
+        if task.started_at:
+            delta = now - task.started_at
+            task.duration_ms = int(delta.total_seconds() * 1000)
+
+    if error_message:
+        task.error_message = error_message
+
+    await db.flush()
+    return task
+
+
+async def save_task_result(
+    db: AsyncSession,
+    task_id: uuid.UUID,
+    result: "ToolResult",
+) -> "TaskResult":
+    """Persist a ToolResult as a TaskResult row."""
+    from agentmesh.models.task import TaskResult
+
+    task_result = TaskResult(
+        id=uuid.uuid4(),
+        task_id=task_id,
+        status=result.status,
+        data=result.data,
+        duration_ms=result.duration_ms,
+    )
+    db.add(task_result)
+    await db.flush()
+    return task_result
+
