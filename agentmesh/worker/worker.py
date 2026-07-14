@@ -26,6 +26,7 @@ import structlog
 from redis.asyncio import Redis
 
 from agentmesh.config import get_settings
+from agentmesh.events import publish_event_nowait
 from agentmesh.models.task import TaskStatus
 from agentmesh.persistence import async_session_factory
 from agentmesh.persistence.repository import save_task_result, update_task_status
@@ -234,6 +235,14 @@ class WorkerProcess:
         async with async_session_factory() as db:
             await update_task_status(db, task_uuid, TaskStatus.RUNNING)
             await db.commit()
+        if self._redis is not None:
+            # Fire-and-forget — see agentmesh.events.publish_event_nowait. This
+            # runs concurrently with the main loop's blocking XREADGROUP reads
+            # on the same client, so it must not be awaited inline.
+            publish_event_nowait(self._redis, job.workflow_id, {
+                "type": "task_update", "workflow_id": job.workflow_id,
+                "task_key": job.task_key, "status": TaskStatus.RUNNING.value,
+            })
 
     async def _persist_success(self, job: JobMessage, result: ToolResult) -> None:
         """Persist the TaskResult row for a successful execution."""

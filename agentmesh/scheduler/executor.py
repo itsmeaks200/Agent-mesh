@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentmesh.compiler.compiler import WorkflowCompiler
 from agentmesh.compiler.errors import CompilationError, MultipleCompilationErrors
+from agentmesh.events import get_global_redis, publish_event
 from agentmesh.models.task import Task, TaskStatus
 from agentmesh.models.workflow import Workflow, WorkflowStatus
 from agentmesh.persistence.repository import (
@@ -130,6 +131,13 @@ class WorkflowExecutor:
         await db.commit()
         bound_log.info("Workflow started")
 
+        redis = get_global_redis()
+        await publish_event(redis, workflow_id, {
+            "type": "workflow_update", "workflow_id": str(workflow_id),
+            "status": WorkflowStatus.RUNNING.value,
+            "total_tasks": workflow.total_tasks, "completed_tasks": workflow.completed_tasks,
+        })
+
         # ── 5. Build runners & task configs ──────────────────────────────
         task_db_map: dict[str, Task] = {t.task_key: t for t in tasks}
 
@@ -150,11 +158,18 @@ class WorkflowExecutor:
             )
 
         # ── 6. Build DB-persisting callbacks ──────────────────────────────
+        async def _publish_task_event(task_key: str, status: TaskStatus, **extra: Any) -> None:
+            await publish_event(redis, workflow_id, {
+                "type": "task_update", "workflow_id": str(workflow_id),
+                "task_key": task_key, "status": status.value, **extra,
+            })
+
         async def on_task_started(task_key: str) -> None:
             task = task_db_map.get(task_key)
             if task:
                 await update_task_status(db, task.id, TaskStatus.RUNNING)
                 await db.commit()
+            await _publish_task_event(task_key, TaskStatus.RUNNING)
             bound_log.debug("Task started", task_key=task_key)
 
         async def on_task_completed(task_key: str, result: ToolResult) -> None:
@@ -163,14 +178,16 @@ class WorkflowExecutor:
                 await update_task_status(db, task.id, TaskStatus.COMPLETED)
                 await save_task_result(db, task.id, result)
                 await db.commit()
+            await _publish_task_event(task_key, TaskStatus.COMPLETED, duration_ms=result.duration_ms)
             bound_log.info("Task completed", task_key=task_key, duration_ms=result.duration_ms)
 
         async def on_task_failed(task_key: str, error: str, will_retry: bool) -> None:
             task = task_db_map.get(task_key)
+            status = TaskStatus.RETRYING if will_retry else TaskStatus.FAILED
             if task:
-                status = TaskStatus.RETRYING if will_retry else TaskStatus.FAILED
                 await update_task_status(db, task.id, status, error_message=error)
                 await db.commit()
+            await _publish_task_event(task_key, status, error_message=error)
             bound_log.warning("Task failed", task_key=task_key, will_retry=will_retry, error=error)
 
         # ── 7. Run scheduler ──────────────────────────────────────────────
@@ -189,18 +206,26 @@ class WorkflowExecutor:
             error_summary = "; ".join(
                 f"{k}: {v}" for k, v in final_state.errors.items()
             )
+            final_status = WorkflowStatus.FAILED
             await update_workflow_status(
-                db, workflow_id, WorkflowStatus.FAILED,
+                db, workflow_id, final_status,
                 error_message=error_summary,
             )
             bound_log.error("Workflow failed", failed_tasks=list(final_state.failed))
         else:
             workflow_obj = await _load_workflow(db, workflow_id)
             workflow_obj.completed_tasks = len(final_state.completed)
-            await update_workflow_status(db, workflow_id, WorkflowStatus.COMPLETED)
+            final_status = WorkflowStatus.COMPLETED
+            await update_workflow_status(db, workflow_id, final_status)
             bound_log.info("Workflow completed", total_tasks=len(final_state.completed))
 
         await db.commit()
+        await publish_event(redis, workflow_id, {
+            "type": "workflow_update", "workflow_id": str(workflow_id),
+            "status": final_status.value,
+            "total_tasks": workflow.total_tasks, "completed_tasks": len(final_state.completed),
+            "error_message": error_summary if final_state.has_failures else None,
+        })
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

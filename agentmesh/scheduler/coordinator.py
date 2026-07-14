@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentmesh.compiler.compiler import WorkflowCompiler
 from agentmesh.compiler.errors import CompilationError, MultipleCompilationErrors
+from agentmesh.events import publish_event_nowait
 from agentmesh.models.task import Task, TaskStatus
 from agentmesh.models.workflow import Workflow, WorkflowStatus
 from agentmesh.persistence.repository import (
@@ -131,6 +132,30 @@ class WorkflowCoordinator:
         await db.commit()
         bound_log.info("Workflow started (distributed mode)")
 
+        # Fire-and-forget: these must never be awaited inline. This loop also
+        # issues blocking XREADGROUP reads on `self._redis`, and interleaving
+        # an awaited PUBLISH with an in-flight blocking read on the same
+        # client can wedge some Redis client implementations. Tasks are
+        # tracked here and drained (best-effort) once the workflow finishes.
+        bg_publish_tasks: set[asyncio.Task] = set()
+
+        def publish_task(task_key: str, status: TaskStatus, **extra: Any) -> None:
+            bg_publish_tasks.add(publish_event_nowait(self._redis, workflow_id, {
+                "type": "task_update", "workflow_id": str(workflow_id),
+                "task_key": task_key, "status": status.value, **extra,
+            }))
+
+        def publish_workflow(status: WorkflowStatus, **extra: Any) -> None:
+            bg_publish_tasks.add(publish_event_nowait(self._redis, workflow_id, {
+                "type": "workflow_update", "workflow_id": str(workflow_id),
+                "status": status.value, **extra,
+            }))
+
+        publish_workflow(
+            WorkflowStatus.RUNNING,
+            total_tasks=workflow.total_tasks, completed_tasks=workflow.completed_tasks,
+        )
+
         await self._producer.ensure_consumer_group()
 
         # ── 2. Local orchestration state ────────────────────────────────────
@@ -170,6 +195,7 @@ class WorkflowCoordinator:
             async with db_lock:
                 await update_task_status(db, task.id, TaskStatus.QUEUED)
                 await db.commit()
+            publish_task(task_key, TaskStatus.QUEUED)
             bound_log.debug("Dispatched task", task_key=task_key, attempt=attempt)
 
         async def dispatch_ready() -> None:
@@ -203,6 +229,7 @@ class WorkflowCoordinator:
                         error_message=errors[task_key],
                     )
                     await db.commit()
+                publish_task(task_key, TaskStatus.FAILED, error_message=errors[task_key])
                 return
             await dispatch(task_key, attempt)
 
@@ -239,6 +266,7 @@ class WorkflowCoordinator:
                     async with db_lock:
                         await update_task_status(db, task.id, TaskStatus.COMPLETED)
                         await db.commit()
+                    publish_task(task_key, TaskStatus.COMPLETED, duration_ms=result_msg.duration_ms)
                     bound_log.info("Task completed", task_key=task_key)
                     await dispatch_ready()
                 else:
@@ -251,6 +279,7 @@ class WorkflowCoordinator:
                                 db, task.id, TaskStatus.RETRYING, error_message=result_msg.error,
                             )
                             await db.commit()
+                        publish_task(task_key, TaskStatus.RETRYING, error_message=result_msg.error)
                         bound_log.warning(
                             "Task failed, scheduling retry",
                             task_key=task_key, attempt=attempt + 1, max_retries=max_retries,
@@ -267,6 +296,7 @@ class WorkflowCoordinator:
                                 db, task.id, TaskStatus.FAILED, error_message=result_msg.error,
                             )
                             await db.commit()
+                        publish_task(task_key, TaskStatus.FAILED, error_message=result_msg.error)
                         bound_log.error(
                             "Task failed permanently",
                             task_key=task_key, attempts=attempt + 1, error=result_msg.error,
@@ -283,13 +313,25 @@ class WorkflowCoordinator:
                 db, workflow_id, WorkflowStatus.FAILED, error_message=error_summary,
             )
             bound_log.error("Workflow failed", failed_tasks=list(failed))
+            await db.commit()
+            publish_workflow(
+                WorkflowStatus.FAILED, total_tasks=workflow.total_tasks,
+                completed_tasks=len(completed), error_message=error_summary,
+            )
         else:
             workflow_obj = await _load_workflow(db, workflow_id)
             workflow_obj.completed_tasks = len(completed)
             await update_workflow_status(db, workflow_id, WorkflowStatus.COMPLETED)
             bound_log.info("Workflow completed", total_tasks=len(completed))
+            await db.commit()
+            publish_workflow(
+                WorkflowStatus.COMPLETED, total_tasks=workflow.total_tasks,
+                completed_tasks=len(completed), error_message=None,
+            )
 
-        await db.commit()
+        # Best-effort: give in-flight publishes a chance to land before we return.
+        if bg_publish_tasks:
+            await asyncio.gather(*bg_publish_tasks, return_exceptions=True)
 
 
 async def _load_workflow(db: AsyncSession, workflow_id: uuid.UUID) -> Workflow:
