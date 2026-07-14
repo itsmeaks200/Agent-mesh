@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # Worker / Redis Streams (Phase 5)
-    execution_mode: str = "distributed"   # "distributed" (Redis Streams + workers) or "inprocess" (Phase 4 asyncio)
+    # "distributed" (Redis Streams + workers) or "inprocess" (Phase 4 asyncio)
+    execution_mode: str = "distributed"
     worker_concurrency: int = 4           # max concurrent tasks per worker
     task_stream_key: str = "agentmesh:tasks"
     result_stream_prefix: str = "agentmesh:results:"
@@ -34,6 +35,9 @@ class Settings(BaseSettings):
 
     # Gemini (Phase 6)
     gemini_api_key: str = ""
+
+    # Auth (Phase 8) — leave unset to disable API-key enforcement entirely
+    api_key: str = ""
 
     model_config = {
         "env_file": ".env",

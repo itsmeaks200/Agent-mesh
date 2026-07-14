@@ -15,8 +15,11 @@ from agentmesh.tools.registry import ToolRegistry
 # model a head start on the exact param keys it should use.
 _PARAM_HINTS: dict[str, str] = {
     "echo": 'params: any key-value pairs, returned unchanged.',
-    "http": 'params: {"url": string, "method": "GET"|"POST"|"PUT"|"PATCH"|"DELETE" (default "GET"), '
-            '"headers": object, "body": object, "timeout": integer seconds}',
+    "http": (
+        'params: {"url": string, '
+        '"method": "GET"|"POST"|"PUT"|"PATCH"|"DELETE" (default "GET"), '
+        '"headers": object, "body": object, "timeout": integer seconds}'
+    ),
     "filesystem": 'params: {"operation": "read"|"write", "path": string, '
                   '"content": string (write only), "encoding": string (default "utf-8")}',
     "shell": 'params: {"command": string, "timeout": integer seconds (default 30), "cwd": string}',
@@ -24,7 +27,8 @@ _PARAM_HINTS: dict[str, str] = {
            '"temperature": number 0.0-2.0 (default 0.7)}',
 }
 
-SYSTEM_PROMPT_TEMPLATE = """You are the AgentMesh workflow planner. Convert a user's natural language \
+SYSTEM_PROMPT_TEMPLATE = """\
+You are the AgentMesh workflow planner. Convert a user's natural language \
 request into a workflow: a directed acyclic graph (DAG) of tasks, where each task calls one tool.
 
 Tool catalog (the ONLY tools you may use):
@@ -79,7 +83,7 @@ def build_system_prompt(registry: ToolRegistry) -> str:
 
 
 def build_user_prompt(request: str, feedback: str | None = None) -> str:
-    """Build the user-turn prompt, optionally including corrective feedback from a failed attempt."""
+    """Build the user-turn prompt, optionally including feedback from a failed attempt."""
     if feedback:
         return (
             f"Request: {request}\n\n"

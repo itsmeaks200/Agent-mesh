@@ -28,6 +28,7 @@ from redis.asyncio import Redis
 from agentmesh.config import get_settings
 from agentmesh.events import publish_event_nowait
 from agentmesh.models.task import TaskStatus
+from agentmesh.observability.logger import bind_task_context, bind_workflow_context, clear_context
 from agentmesh.persistence import async_session_factory
 from agentmesh.persistence.repository import save_task_result, update_task_status
 from agentmesh.queue.consumer import JobConsumer
@@ -125,7 +126,9 @@ class WorkerProcess:
                         ))
                     last_claim_check = now
 
-                jobs = await consumer.read_jobs(count=self._settings.worker_concurrency, block_ms=1000)
+                jobs = await consumer.read_jobs(
+                    count=self._settings.worker_concurrency, block_ms=1000
+                )
                 for msg_id, job in jobs:
                     in_flight.add(asyncio.create_task(
                         self._handle_job(msg_id, job, consumer, producer, health)
@@ -161,6 +164,8 @@ class WorkerProcess:
         health: WorkerHealth,
     ) -> None:
         """Execute a single job end-to-end: run tool → persist → publish result → ack."""
+        bind_workflow_context(job.workflow_id, worker_id=self._worker_id)
+        bind_task_context(job.task_key)
         async with self._semaphore:
             self._active_tasks += 1
             try:
@@ -198,6 +203,7 @@ class WorkerProcess:
                     log.exception("Failed to report worker error", task_key=job.task_key)
             finally:
                 self._active_tasks -= 1
+                clear_context()
 
     async def _execute(self, job: JobMessage) -> ToolResult:
         """Resolve the tool and run it with a timeout, returning a ToolResult."""
@@ -222,7 +228,7 @@ class WorkerProcess:
                 tool.safe_execute(context),
                 timeout=job.timeout_seconds or None,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ToolResult.failure(
                 error=f"Task '{job.task_key}' timed out after {job.timeout_seconds}s"
             )

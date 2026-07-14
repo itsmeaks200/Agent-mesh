@@ -1,10 +1,7 @@
 """Shared test fixtures and configuration."""
 
-import asyncio
-import uuid
 from collections.abc import AsyncGenerator
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import JSON, event
@@ -12,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from agentmesh.main import create_app
 from agentmesh.persistence import Base, get_db
-
 
 # Use an in-memory SQLite for tests (fast, no external deps)
 # For integration tests against PostgreSQL, set TEST_DATABASE_URL env var

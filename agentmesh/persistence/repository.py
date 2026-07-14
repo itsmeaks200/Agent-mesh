@@ -1,7 +1,8 @@
 """Database operations for workflows and tasks."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentmesh.models.task import Task, TaskResult, TaskStatus, task_dependencies
 from agentmesh.models.workflow import Workflow, WorkflowStatus
 from agentmesh.schemas.workflow import TaskSpec
+
+if TYPE_CHECKING:
+    from agentmesh.tools.base import ToolResult
 
 
 async def create_workflow(
@@ -113,7 +117,7 @@ async def update_workflow_status(
 
     workflow.status = status
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if status == WorkflowStatus.RUNNING and workflow.started_at is None:
         workflow.started_at = now
     elif status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED):
@@ -156,7 +160,7 @@ async def update_task_status(
     if task is None:
         return None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     task.status = status
 
     if status == TaskStatus.RUNNING and task.started_at is None:

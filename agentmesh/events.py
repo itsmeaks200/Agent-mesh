@@ -40,10 +40,14 @@ async def publish_event(redis: Redis, workflow_id: uuid.UUID | str, event: dict[
             timeout=_PUBLISH_TIMEOUT_SECONDS,
         )
     except Exception as exc:
-        log.warning("Failed to publish workflow event", workflow_id=str(workflow_id), error=str(exc))
+        log.warning(
+            "Failed to publish workflow event", workflow_id=str(workflow_id), error=str(exc)
+        )
 
 
-def publish_event_nowait(redis: Redis, workflow_id: uuid.UUID | str, event: dict[str, Any]) -> asyncio.Task:
+def publish_event_nowait(
+    redis: Redis, workflow_id: uuid.UUID | str, event: dict[str, Any]
+) -> asyncio.Task:
     """Schedule a publish without awaiting it inline.
 
     Callers on a hot orchestration path (dispatch/retry/completion loops that

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import Annotated
 
-import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -1,0 +1,31 @@
+{
+  "tasks": [
+    {
+      "id": "fetch_hn",
+      "tool": "http",
+      "params": {
+        "url": "https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=10",
+        "method": "GET"
+      },
+      "depends_on": []
+    },
+    {
+      "id": "summarize",
+      "tool": "llm",
+      "params": {
+        "prompt": "You are writing a short daily digest of Hacker News. Given this raw API response of the current front page (JSON with a `hits` array, each with `title`, `url`, and `points`), write a punchy 5-8 bullet point summary of today's top stories, newest and most interesting first. Respond in Markdown.\n\n{{fetch_hn.body}}"
+      },
+      "depends_on": ["fetch_hn"]
+    },
+    {
+      "id": "save_report",
+      "tool": "filesystem",
+      "params": {
+        "operation": "write",
+        "path": "hn_digest.md",
+        "content": "# Hacker News Digest\n\n{{summarize.text}}\n"
+      },
+      "depends_on": ["summarize"]
+    }
+  ]
+}

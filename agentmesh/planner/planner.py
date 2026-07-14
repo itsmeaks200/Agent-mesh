@@ -111,7 +111,9 @@ class WorkflowPlanner:
                 )
                 continue
 
-            log.info("Planner produced a valid workflow", attempt=attempt, task_count=len(task_specs))
+            log.info(
+                "Planner produced a valid workflow", attempt=attempt, task_count=len(task_specs)
+            )
             return task_specs
 
         raise PlannerError(

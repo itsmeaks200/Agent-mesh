@@ -1,7 +1,6 @@
 """Tests for HttpTool — uses pytest-httpx to mock requests."""
 
 import pytest
-import pytest_asyncio
 
 from agentmesh.tools.base import ToolContext
 from agentmesh.tools.http_tool import HttpTool

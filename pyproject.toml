@@ -47,3 +47,10 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+ignore = [
+    "UP042",  # str+Enum is intentional here: values must JSON-serialize and format as plain strings
+    "N818",   # MultipleCompilationErrors: named for what it holds, not "...Error"
+]
+
+[tool.ruff.lint.per-file-ignores]
+"agentmesh/compiler/validator.py" = ["N806"]  # WHITE/GRAY/BLACK: conventional DFS coloring names

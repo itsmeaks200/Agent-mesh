@@ -7,9 +7,7 @@ hooks via async callbacks to persist every state change.
 
 from __future__ import annotations
 
-import logging
 import uuid
-from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +17,7 @@ from agentmesh.compiler.errors import CompilationError, MultipleCompilationError
 from agentmesh.events import get_global_redis, publish_event
 from agentmesh.models.task import Task, TaskStatus
 from agentmesh.models.workflow import Workflow, WorkflowStatus
+from agentmesh.observability.logger import bind_workflow_context, clear_context
 from agentmesh.persistence.repository import (
     get_workflow_tasks,
     save_task_result,
@@ -26,9 +25,9 @@ from agentmesh.persistence.repository import (
     update_workflow_status,
 )
 from agentmesh.scheduler.retry import RetryPolicy
-from agentmesh.scheduler.scheduler import WorkflowScheduler, TaskRunner
+from agentmesh.scheduler.scheduler import TaskRunner, WorkflowScheduler
 from agentmesh.scheduler.state import TaskRun
-from agentmesh.tools.base import ToolContext, ToolResult
+from agentmesh.tools.base import ToolResult
 from agentmesh.tools.registry import default_registry
 
 log = structlog.get_logger(__name__)
@@ -65,6 +64,7 @@ class WorkflowExecutor:
         This method is designed to be run as a background asyncio task.
         All exceptions are caught and persisted as workflow failures.
         """
+        bind_workflow_context(workflow_id)
         bound_log = log.bind(workflow_id=str(workflow_id))
 
         try:
@@ -76,6 +76,8 @@ class WorkflowExecutor:
                 error_message=f"Internal executor error: {exc}",
             )
             await db.commit()
+        finally:
+            clear_context()
 
     async def _execute_inner(
         self,
@@ -178,7 +180,9 @@ class WorkflowExecutor:
                 await update_task_status(db, task.id, TaskStatus.COMPLETED)
                 await save_task_result(db, task.id, result)
                 await db.commit()
-            await _publish_task_event(task_key, TaskStatus.COMPLETED, duration_ms=result.duration_ms)
+            await _publish_task_event(
+                task_key, TaskStatus.COMPLETED, duration_ms=result.duration_ms
+            )
             bound_log.info("Task completed", task_key=task_key, duration_ms=result.duration_ms)
 
         async def on_task_failed(task_key: str, error: str, will_retry: bool) -> None:

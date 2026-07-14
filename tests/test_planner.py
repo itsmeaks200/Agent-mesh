@@ -87,7 +87,10 @@ class TestPlannerHappyPath:
     async def test_plan_handles_linear_dag(self):
         tasks = [
             {"id": "fetch", "tool": "http", "params": {"url": "https://x.test"}, "depends_on": []},
-            {"id": "summarize", "tool": "llm", "params": {"prompt": "sum"}, "depends_on": ["fetch"]},
+            {
+                "id": "summarize", "tool": "llm",
+                "params": {"prompt": "sum"}, "depends_on": ["fetch"],
+            },
         ]
         generate = _scripted_generate(_valid_response(tasks=tasks))
         planner = WorkflowPlanner(generate_fn=generate)

@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from agentmesh.compiler.compiler import WorkflowCompiler
 from agentmesh.scheduler.retry import NO_RETRY_POLICY, RetryPolicy
 from agentmesh.scheduler.scheduler import WorkflowScheduler
 from agentmesh.scheduler.state import TaskRun
 from agentmesh.schemas.workflow import TaskSpec
 from agentmesh.tools.base import ToolContext, ToolResult
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -226,7 +223,7 @@ class TestDependencyInjection:
         }
         runners = {"A": _success_runner(data={"msg": "from A"}), "B": b_runner}
 
-        state = await _build_scheduler().run(graph, runners, configs)
+        await _build_scheduler().run(graph, runners, configs)
 
         assert "A" in received_deps
         assert received_deps["A"].data == {"msg": "from A"}

@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from agentmesh.tools.base import BaseTool, ToolContext, ToolResult
+from agentmesh.tools.templating import render_template
 
 # Sandbox root — all file operations are contained here
 WORKSPACE_DIR = Path("workspace").resolve()
@@ -23,7 +24,8 @@ class FilesystemTool(BaseTool):
         path (str):      File path relative to the workspace root.
 
     Optional params:
-        content (str):   File content for write operations.
+        content (str):   File content for write operations. May reference an
+            upstream task's result with `{{task_key}}` or `{{task_key.field}}`.
         encoding (str):  File encoding. Default: "utf-8".
 
     Output (read)::
@@ -95,7 +97,7 @@ class FilesystemTool(BaseTool):
                 )
 
             elif operation == "write":
-                content = context.params.get("content", "")
+                content = render_template(context.params.get("content", ""), context.dependencies)
                 # Create parent directories if they don't exist
                 safe.parent.mkdir(parents=True, exist_ok=True)
                 safe.write_text(content, encoding=encoding)

@@ -83,7 +83,9 @@ class WorkerHealth:
                 "tasks_processed": int(g("tasks_processed", "0") or 0),
                 "started_at": float(g("started_at", "0") or 0),
                 "last_heartbeat": last_heartbeat,
-                "seconds_since_heartbeat": round(now - last_heartbeat, 1) if last_heartbeat else None,
+                "seconds_since_heartbeat": (
+                    round(now - last_heartbeat, 1) if last_heartbeat else None
+                ),
             })
 
         workers.sort(key=lambda w: w["worker_id"])

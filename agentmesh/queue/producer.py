@@ -8,10 +8,6 @@ from redis.asyncio import Redis
 
 from agentmesh.config import get_settings
 from agentmesh.queue.streams import (
-    CONSUMER_GROUP,
-    DEAD_LETTER_STREAM,
-    RESULT_STREAM_PREFIX,
-    TASK_STREAM,
     JobMessage,
     ResultMessage,
     serialize_job,

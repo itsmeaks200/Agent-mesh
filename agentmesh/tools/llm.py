@@ -8,6 +8,7 @@ from __future__ import annotations
 import time
 
 from agentmesh.tools.base import BaseTool, ToolContext, ToolResult
+from agentmesh.tools.templating import render_template
 
 DEFAULT_MODEL = "gemini-2.0-flash"
 
@@ -16,7 +17,9 @@ class LLMTool(BaseTool):
     """Call the Gemini API to generate or transform text.
 
     Required params:
-        prompt (str): The user prompt to send to the model.
+        prompt (str): The user prompt to send to the model. May reference an
+            upstream task's result with `{{task_key}}` (whole `data` dict,
+            JSON-encoded) or `{{task_key.field}}` (just that field).
 
     Optional params:
         model (str):       Gemini model name. Default: "gemini-2.0-flash".
@@ -52,6 +55,7 @@ class LLMTool(BaseTool):
                 error="LLMTool requires a 'prompt' parameter.",
                 duration_ms=int((time.monotonic() - start) * 1000),
             )
+        prompt = render_template(prompt, context.dependencies)
 
         model_name = context.params.get("model", DEFAULT_MODEL)
         system_instruction = context.params.get("system")

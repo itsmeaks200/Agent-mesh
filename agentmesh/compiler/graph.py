@@ -158,4 +158,5 @@ class WorkflowGraph:
         return graph
 
     def __repr__(self) -> str:
-        return f"<WorkflowGraph nodes={self.node_count} edges={sum(len(v) for v in self._adj.values())}>"
+        edge_count = sum(len(v) for v in self._adj.values())
+        return f"<WorkflowGraph nodes={self.node_count} edges={edge_count}>"

@@ -136,7 +136,10 @@ def validate_schema(tasks: list[TaskSpec]) -> list[CompilationError]:
             schema_errors.append({
                 "task_id": task.id,
                 "field": "id",
-                "error": f"Task ID '{task.id}' contains invalid characters (allowed: a-z, 0-9, _, -)",
+                "error": (
+                    f"Task ID '{task.id}' contains invalid characters "
+                    "(allowed: a-z, 0-9, _, -)"
+                ),
             })
 
     if schema_errors:

@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 from agentmesh.compiler.graph import WorkflowGraph
 from agentmesh.scheduler.retry import RetryPolicy, compute_backoff
@@ -209,7 +208,7 @@ class WorkflowScheduler:
                 runner(context),
                 timeout=cfg.timeout_seconds or None,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             result = ToolResult.failure(
                 error=f"Task '{task_key}' timed out after {cfg.timeout_seconds}s"
             )

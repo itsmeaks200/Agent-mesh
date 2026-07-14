@@ -70,19 +70,37 @@ curl -X POST http://localhost:8000/api/v1/workflows \
 curl http://localhost:8000/health
 ```
 
+### Authentication (optional)
+Every request is unauthenticated by default. Set `API_KEY` in `.env` to
+require a matching `X-API-Key` header on every request except `/health`,
+`/docs`, `/redoc`, and the WebSocket stream.
+
+## Demo
+
+See [docs/demo.md](docs/demo.md) for a full end-to-end run — fetch the
+Hacker News front page, summarize it with Gemini, and save the digest to
+disk — using the workflow spec in [examples/hn_digest_workflow.json](examples/hn_digest_workflow.json).
+
 ## Project Structure
 ```
 agentmesh/
 ├── api/            # FastAPI routes and WebSocket handlers
+├── middleware/     # Correlation-ID and API-key ASGI middleware
+├── observability/  # Structured logging setup
 ├── models/         # SQLAlchemy ORM models
 ├── schemas/        # Pydantic request/response schemas
 ├── persistence/    # Database engine, sessions, repository
+├── scheduler/      # In-process executor, distributed coordinator, startup recovery
+├── worker/         # Standalone Redis Streams worker process
+├── tools/          # Pluggable tool runtime (http, llm, filesystem, shell, echo)
 ├── config.py       # Pydantic Settings configuration
 └── main.py         # FastAPI application entrypoint
 
 alembic/            # Database migration scripts
+examples/           # Example workflow specs (see docs/demo.md)
+frontend/           # React + TypeScript dashboard
 tests/              # Pytest test suite
-docs/               # Architecture, API reference, implementation plan
+docs/               # Architecture, API reference, implementation plan, demo
 ```
 
 ## Tech Stack
@@ -104,6 +122,8 @@ docs/               # Architecture, API reference, implementation plan
 - [Database Schema](docs/database-schema.md)
 - [API Reference](docs/api-reference.md)
 - [Roadmap](docs/roadmap.md)
+- [Demo Walkthrough](docs/demo.md)
+- [Contributing](docs/contributing.md)
 
 ## License
 

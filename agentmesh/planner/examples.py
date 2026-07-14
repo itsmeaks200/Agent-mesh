@@ -40,7 +40,10 @@ FEW_SHOT_EXAMPLES: list[dict] = [
         },
     },
     {
-        "request": "Fetch https://api.example.com/users and https://api.example.com/orders in parallel, then combine the results into a report.",
+        "request": (
+            "Fetch https://api.example.com/users and https://api.example.com/orders "
+            "in parallel, then combine the results into a report."
+        ),
         "response": {
             "tasks": [
                 {

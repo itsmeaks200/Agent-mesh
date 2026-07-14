@@ -12,23 +12,10 @@ consumer within the shared ``workers`` consumer group.
 from __future__ import annotations
 
 import asyncio
-import logging
 import signal
 
-import structlog
-
+from agentmesh.observability.logger import configure_logging
 from agentmesh.worker.worker import WorkerProcess
-
-
-def _configure_logging() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    structlog.configure(
-        processors=[
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.add_log_level,
-            structlog.processors.JSONRenderer(),
-        ],
-    )
 
 
 async def _main() -> None:
@@ -46,7 +33,7 @@ async def _main() -> None:
 
 
 def main() -> None:
-    _configure_logging()
+    configure_logging()
     asyncio.run(_main())
 
 

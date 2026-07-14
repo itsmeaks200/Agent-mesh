@@ -3,7 +3,6 @@
 import pytest
 
 from agentmesh.compiler import (
-    CompilationError,
     CycleDetectedError,
     DuplicateTaskIdError,
     MissingDependencyError,
@@ -13,7 +12,6 @@ from agentmesh.compiler import (
     WorkflowCompiler,
 )
 from agentmesh.schemas.workflow import TaskSpec
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

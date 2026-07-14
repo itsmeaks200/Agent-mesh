@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum, Integer, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -79,5 +79,5 @@ class Workflow(Base):
 
 
 # Import here to avoid circular imports — these are needed for relationship resolution
-from agentmesh.models.task import Task  # noqa: E402, F401
 from agentmesh.models.log import WorkflowLog  # noqa: E402, F401
+from agentmesh.models.task import Task  # noqa: E402, F401

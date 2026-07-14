@@ -1,9 +1,7 @@
 """Tests for WorkflowGraph DAG data structure."""
 
-import pytest
 
 from agentmesh.compiler.graph import WorkflowGraph
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 

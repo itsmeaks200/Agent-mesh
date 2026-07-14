@@ -76,7 +76,7 @@ class ShellTool(BaseTool):
                     proc.communicate(), timeout=timeout
                 )
                 timed_out = False
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 await proc.communicate()
                 timed_out = True

@@ -65,5 +65,8 @@ async def run_agent_endpoint(
         "workflow_id": str(workflow.id),
         "status": "SCHEDULED",
         "tasks_planned": len(task_specs),
-        "message": "Workflow planned and execution started. Poll GET /workflows/{id}/status for progress.",
+        "message": (
+            "Workflow planned and execution started. "
+            "Poll GET /workflows/{id}/status for progress."
+        ),
     }

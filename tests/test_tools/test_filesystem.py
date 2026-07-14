@@ -3,7 +3,7 @@
 import pytest
 
 from agentmesh.tools.base import ToolContext
-from agentmesh.tools.filesystem import WORKSPACE_DIR, FilesystemTool
+from agentmesh.tools.filesystem import FilesystemTool
 
 
 @pytest.fixture

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
-
+from dataclasses import dataclass, field
 
 # ── Stream Keys (defaults — overridden by Settings in production) ─────────────
 
@@ -85,7 +84,9 @@ def deserialize_job(fields: dict) -> JobMessage:
         tool_name=s(fields.get(b"tool_name", fields.get("tool_name", ""))),
         params=j(fields.get(b"params", fields.get("params", "{}"))),
         depends_on=j(fields.get(b"depends_on", fields.get("depends_on", "[]"))),
-        dependency_results=j(fields.get(b"dependency_results", fields.get("dependency_results", "{}"))),
+        dependency_results=j(
+            fields.get(b"dependency_results", fields.get("dependency_results", "{}"))
+        ),
         max_retries=i(fields.get(b"max_retries", fields.get("max_retries", "3"))),
         attempt=i(fields.get(b"attempt", fields.get("attempt", "0"))),
         timeout_seconds=i(fields.get(b"timeout_seconds", fields.get("timeout_seconds", "300"))),

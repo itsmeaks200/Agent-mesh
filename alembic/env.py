@@ -3,16 +3,16 @@
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from agentmesh.persistence import Base
+from agentmesh.models.log import WorkflowLog  # noqa: F401
+from agentmesh.models.task import Task, TaskResult, task_dependencies  # noqa: F401
 
 # Import all models so Alembic can detect them
 from agentmesh.models.workflow import Workflow  # noqa: F401
-from agentmesh.models.task import Task, TaskResult, task_dependencies  # noqa: F401
-from agentmesh.models.log import WorkflowLog  # noqa: F401
+from agentmesh.persistence import Base
+from alembic import context
 
 # Alembic Config object
 config = context.config

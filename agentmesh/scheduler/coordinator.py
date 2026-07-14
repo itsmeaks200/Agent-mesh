@@ -37,15 +37,16 @@ from agentmesh.compiler.errors import CompilationError, MultipleCompilationError
 from agentmesh.events import publish_event_nowait
 from agentmesh.models.task import Task, TaskStatus
 from agentmesh.models.workflow import Workflow, WorkflowStatus
+from agentmesh.observability.logger import bind_workflow_context, clear_context
 from agentmesh.persistence.repository import (
     get_workflow,
     get_workflow_tasks,
     update_task_status,
     update_workflow_status,
 )
-from agentmesh.queue.producer import JobProducer
 from agentmesh.queue.consumer import JobConsumer
-from agentmesh.queue.streams import JobMessage, ResultMessage
+from agentmesh.queue.producer import JobProducer
+from agentmesh.queue.streams import JobMessage
 from agentmesh.scheduler.retry import DEFAULT_RETRY_POLICY, RetryPolicy, compute_backoff
 from agentmesh.schemas.workflow import TaskSpec
 from agentmesh.tools.base import ToolResult
@@ -80,9 +81,10 @@ class WorkflowCoordinator:
         Designed to be run as a background asyncio task. All exceptions are
         caught and persisted as workflow failures.
         """
+        bind_workflow_context(workflow_id)
         bound_log = log.bind(workflow_id=str(workflow_id))
         try:
-            await self._execute_inner(workflow_id, db, bound_log)
+            await self._execute_inner(workflow_id, db, bound_log, resume=False)
         except Exception as exc:
             bound_log.exception("Unhandled error in coordinator", error=str(exc))
             await update_workflow_status(
@@ -90,12 +92,41 @@ class WorkflowCoordinator:
                 error_message=f"Internal coordinator error: {exc}",
             )
             await db.commit()
+        finally:
+            clear_context()
+
+    async def resume(self, workflow_id: uuid.UUID, db: AsyncSession) -> None:
+        """Re-attach to a workflow left ``RUNNING`` by a coordinator that crashed.
+
+        Reconstructs in-memory dispatch state (which tasks were already
+        dispatched/completed/failed, and their results) from the database,
+        then re-enters the same result-stream loop a fresh ``execute()``
+        would run. Tasks already queued or running in Redis are *not*
+        re-dispatched — the shared per-workflow result stream still delivers
+        their eventual result to whichever coordinator instance is
+        listening, including this new one.
+        """
+        bind_workflow_context(workflow_id)
+        bound_log = log.bind(workflow_id=str(workflow_id))
+        try:
+            await self._execute_inner(workflow_id, db, bound_log, resume=True)
+        except Exception as exc:
+            bound_log.exception("Unhandled error resuming coordinator", error=str(exc))
+            await update_workflow_status(
+                db, workflow_id, WorkflowStatus.FAILED,
+                error_message=f"Internal coordinator error during resume: {exc}",
+            )
+            await db.commit()
+        finally:
+            clear_context()
 
     async def _execute_inner(
         self,
         workflow_id: uuid.UUID,
         db: AsyncSession,
         bound_log: Any,
+        *,
+        resume: bool,
     ) -> None:
         # ── 1. Load + compile (identical to WorkflowExecutor) ──────────────
         workflow = await _load_workflow(db, workflow_id)
@@ -125,12 +156,15 @@ class WorkflowCoordinator:
             await db.commit()
             return
 
-        workflow.compiled_graph = graph.to_dict()
-        await db.flush()
+        if resume:
+            bound_log.info("Resuming workflow (distributed mode)")
+        else:
+            workflow.compiled_graph = graph.to_dict()
+            await db.flush()
 
-        await update_workflow_status(db, workflow_id, WorkflowStatus.RUNNING)
-        await db.commit()
-        bound_log.info("Workflow started (distributed mode)")
+            await update_workflow_status(db, workflow_id, WorkflowStatus.RUNNING)
+            await db.commit()
+            bound_log.info("Workflow started (distributed mode)")
 
         # Fire-and-forget: these must never be awaited inline. This loop also
         # issues blocking XREADGROUP reads on `self._redis`, and interleaving
@@ -151,10 +185,11 @@ class WorkflowCoordinator:
                 "status": status.value, **extra,
             }))
 
-        publish_workflow(
-            WorkflowStatus.RUNNING,
-            total_tasks=workflow.total_tasks, completed_tasks=workflow.completed_tasks,
-        )
+        if not resume:
+            publish_workflow(
+                WorkflowStatus.RUNNING,
+                total_tasks=workflow.total_tasks, completed_tasks=workflow.completed_tasks,
+            )
 
         await self._producer.ensure_consumer_group()
 
@@ -171,6 +206,27 @@ class WorkflowCoordinator:
         results: dict[str, ToolResult] = {}
         errors: dict[str, str] = {}
         db_lock = asyncio.Lock()
+
+        if resume:
+            # Reconstruct dispatch state from persisted task status. Anything
+            # already QUEUED/RUNNING/RETRYING in Redis is left alone — it's
+            # still "dispatched" as far as this loop is concerned, and its
+            # eventual result arrives on the same per-workflow result stream.
+            for task in tasks:
+                key = task.task_key
+                if task.status == TaskStatus.COMPLETED:
+                    dispatched.add(key)
+                    completed.add(key)
+                    results[key] = ToolResult.success(
+                        data=(task.result.data if task.result else {}) or {},
+                        duration_ms=task.duration_ms,
+                    )
+                elif task.status == TaskStatus.FAILED:
+                    dispatched.add(key)
+                    failed.add(key)
+                    errors[key] = task.error_message or "Unknown error"
+                elif task.status in (TaskStatus.QUEUED, TaskStatus.RUNNING, TaskStatus.RETRYING):
+                    dispatched.add(key)
 
         async def dispatch(task_key: str, attempt: int) -> None:
             task = task_db_map[task_key]

@@ -66,7 +66,9 @@ async def workflow_events_ws(
 
     workflow = await get_workflow(db, workflow_id)
     if workflow is None:
-        await websocket.send_json({"type": "error", "message": f"Workflow '{workflow_id}' not found."})
+        await websocket.send_json(
+            {"type": "error", "message": f"Workflow '{workflow_id}' not found."}
+        )
         await websocket.close(code=4404)
         return
 
