@@ -233,3 +233,27 @@ async def test_health_check(client: AsyncClient):
     resp = await client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_metrics_endpoint(client: AsyncClient):
+    """/metrics should serve Prometheus exposition text without auth."""
+    resp = await client.get("/metrics")
+    assert resp.status_code == 200
+    assert "text/plain" in resp.headers["content-type"]
+    assert b"agentmesh_workflows_total" in resp.content
+
+
+# ── Duration ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_workflow_response_includes_duration_ms(client: AsyncClient):
+    """A freshly created (unstarted) workflow reports duration_ms as null."""
+    resp = await client.post("/api/v1/workflows", json=SIMPLE_WORKFLOW)
+    data = resp.json()
+    assert data["duration_ms"] is None
+
+    list_resp = await client.get("/api/v1/workflows")
+    summary = list_resp.json()["workflows"][0]
+    assert "duration_ms" in summary

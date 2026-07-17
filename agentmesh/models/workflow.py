@@ -2,7 +2,7 @@
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Enum, Integer, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -73,6 +73,18 @@ class Workflow(Base):
         cascade="all, delete-orphan",
         lazy="noload",
     )
+
+    @property
+    def duration_ms(self) -> int | None:
+        """Wall-clock duration so far. ``None`` until execution has started.
+
+        Uses the current time as the end point while still running, so
+        callers get a live-updating figure instead of ``None`` mid-execution.
+        """
+        if self.started_at is None:
+            return None
+        end = self.completed_at or datetime.now(UTC)
+        return int((end - self.started_at).total_seconds() * 1000)
 
     def __repr__(self) -> str:
         return f"<Workflow {self.id} status={self.status}>"

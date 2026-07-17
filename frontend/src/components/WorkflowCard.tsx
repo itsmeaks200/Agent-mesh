@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { StatusBadge } from './StatusBadge'
+import { formatDuration } from '../lib/format'
 import type { WorkflowSummary } from '../types'
 
 function timeAgo(iso: string | null): string {
@@ -15,6 +16,7 @@ function timeAgo(iso: string | null): string {
 
 export function WorkflowCard({ workflow }: { workflow: WorkflowSummary }) {
   const progress = workflow.total_tasks > 0 ? workflow.completed_tasks / workflow.total_tasks : 0
+  const duration = formatDuration(workflow.duration_ms)
 
   return (
     <Link to={`/workflows/${workflow.id}`} className="workflow-card glass-card">
@@ -29,7 +31,8 @@ export function WorkflowCard({ workflow }: { workflow: WorkflowSummary }) {
           <div className="workflow-card__progress-fill" style={{ width: `${progress * 100}%` }} />
         </div>
         <span className="workflow-card__meta">
-          {workflow.completed_tasks}/{workflow.total_tasks} tasks · {timeAgo(workflow.created_at)}
+          {workflow.completed_tasks}/{workflow.total_tasks} tasks
+          {duration && ` · ${duration}`} · {timeAgo(workflow.created_at)}
         </span>
       </div>
     </Link>

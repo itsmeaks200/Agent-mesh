@@ -67,6 +67,7 @@ export interface WorkflowSummary {
   created_at: string
   started_at: string | null
   completed_at: string | null
+  duration_ms: number | null
 }
 
 export interface WorkflowListResponse {

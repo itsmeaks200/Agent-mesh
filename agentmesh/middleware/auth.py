@@ -23,9 +23,10 @@ log = structlog.get_logger(__name__)
 API_KEY_HEADER = "X-API-Key"
 
 # Always reachable without a key: health/docs so uptime checks and the
-# OpenAPI UI work before anyone's configured a client, plus the websocket
-# stream, which browsers cannot attach custom headers to.
-EXEMPT_PATHS = {"/health", "/docs", "/redoc", "/openapi.json"}
+# OpenAPI UI work before anyone's configured a client, /metrics so Prometheus
+# scrapers work with zero config, plus the websocket stream, which browsers
+# cannot attach custom headers to.
+EXEMPT_PATHS = {"/health", "/metrics", "/docs", "/redoc", "/openapi.json"}
 EXEMPT_PREFIXES = ("/api/v1/ws/",)
 
 

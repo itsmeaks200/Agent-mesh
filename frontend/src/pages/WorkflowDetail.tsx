@@ -4,13 +4,12 @@ import { DAGVisualization } from '../components/DAGVisualization'
 import { StatusBadge } from '../components/StatusBadge'
 import { useWorkflowSocket } from '../hooks/useWebSocket'
 import { useWorkflowStore } from '../stores/workflowStore'
+import { formatDuration } from '../lib/format'
 
-function formatDuration(startedAt: string | null, completedAt: string | null): string | null {
+function elapsedMs(startedAt: string | null, completedAt: string | null): number | null {
   if (!startedAt) return null
   const end = completedAt ? new Date(completedAt).getTime() : Date.now()
-  const seconds = Math.max(0, (end - new Date(startedAt).getTime()) / 1000)
-  if (seconds < 60) return `${seconds.toFixed(1)}s`
-  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
+  return Math.max(0, end - new Date(startedAt).getTime())
 }
 
 export function WorkflowDetail() {
@@ -44,7 +43,7 @@ export function WorkflowDetail() {
   }
 
   const progress = store.totalTasks > 0 ? store.completedTasks / store.totalTasks : 0
-  const duration = formatDuration(store.startedAt, store.completedAt)
+  const duration = formatDuration(elapsedMs(store.startedAt, store.completedAt))
 
   return (
     <div className="workflow-detail">

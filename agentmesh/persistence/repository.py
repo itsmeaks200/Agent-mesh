@@ -6,9 +6,11 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from agentmesh.models.task import Task, TaskResult, TaskStatus, task_dependencies
 from agentmesh.models.workflow import Workflow, WorkflowStatus
+from agentmesh.observability.metrics import record_task_terminal, record_workflow_terminal
 from agentmesh.schemas.workflow import TaskSpec
 
 if TYPE_CHECKING:
@@ -67,12 +69,40 @@ async def create_workflow(
                     await db.execute(stmt)
 
     await db.flush()
-    return workflow
+
+    # Re-fetch through a SELECT so relationships configured lazy="selectin"
+    # (tasks, and nested task.depends_on / task.result) populate via an
+    # awaited query instead of an implicit lazy load outside of an async
+    # context (which raises MissingGreenlet). expire_all() is required
+    # because the Task/Workflow objects built above are already identity-
+    # mapped as persistent with those relationships unloaded — without it,
+    # the selectin loader sees "already present, nothing to do" and skips
+    # the nested follow-up SELECTs instead of populating them.
+    workflow_id = workflow.id
+    db.expire_all()
+    created = await get_workflow(db, workflow_id)
+    assert created is not None
+    return created
 
 
 async def get_workflow(db: AsyncSession, workflow_id: uuid.UUID) -> Workflow | None:
-    """Get a workflow by ID with tasks and results eagerly loaded."""
-    stmt = select(Workflow).where(Workflow.id == workflow_id)
+    """Get a workflow by ID with tasks and results eagerly loaded.
+
+    ``Task.depends_on`` and ``Task.result`` are also ``lazy="selectin"`` at
+    the mapper level, but that default does not reliably nest under another
+    selectin-loaded collection (observed with a self-referential many-to-many
+    relationship) — so it's requested explicitly here to guarantee no
+    attribute access below triggers an implicit (and, in async code,
+    unsupported) lazy load.
+    """
+    stmt = (
+        select(Workflow)
+        .where(Workflow.id == workflow_id)
+        .options(
+            selectinload(Workflow.tasks).selectinload(Task.depends_on),
+            selectinload(Workflow.tasks).selectinload(Task.result),
+        )
+    )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -122,6 +152,7 @@ async def update_workflow_status(
         workflow.started_at = now
     elif status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED):
         workflow.completed_at = now
+        record_workflow_terminal(status.value, workflow.duration_ms)
 
     if error_message:
         workflow.error_message = error_message
@@ -170,6 +201,7 @@ async def update_task_status(
         if task.started_at:
             delta = now - task.started_at
             task.duration_ms = int(delta.total_seconds() * 1000)
+        record_task_terminal(task.tool_name, status.value, task.duration_ms)
 
     if error_message:
         task.error_message = error_message

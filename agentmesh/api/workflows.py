@@ -61,6 +61,7 @@ def _workflow_to_response(workflow) -> WorkflowResponse:
         created_at=workflow.created_at,
         started_at=workflow.started_at,
         completed_at=workflow.completed_at,
+        duration_ms=workflow.duration_ms,
         tasks=[_task_to_response(t) for t in workflow.tasks],
     )
 
@@ -167,6 +168,7 @@ async def list_workflows_endpoint(
                 created_at=w.created_at,
                 started_at=w.started_at,
                 completed_at=w.completed_at,
+                duration_ms=w.duration_ms,
             )
             for w in workflows
         ],

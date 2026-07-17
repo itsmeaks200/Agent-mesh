@@ -8,7 +8,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from agentmesh.api.router import api_router
@@ -16,6 +16,7 @@ from agentmesh.config import get_settings
 from agentmesh.middleware.auth import APIKeyMiddleware
 from agentmesh.middleware.correlation import CorrelationIdMiddleware
 from agentmesh.observability.logger import configure_logging
+from agentmesh.observability.metrics import render_latest
 from agentmesh.persistence import engine
 from agentmesh.scheduler.recovery import resume_incomplete_workflows
 
@@ -147,6 +148,12 @@ def create_app() -> FastAPI:
             "version": settings.api_version,
             "redis": "connected" if redis_ok else "disconnected",
         }
+
+    # Prometheus scrape endpoint (outside versioned API, no auth required)
+    @app.get("/metrics", tags=["system"], include_in_schema=False)
+    async def metrics():
+        body, content_type = render_latest()
+        return Response(content=body, media_type=content_type)
 
     return app
 

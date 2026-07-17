@@ -107,6 +107,7 @@ class WorkflowResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    duration_ms: int | None = None
     tasks: list[TaskResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
@@ -123,6 +124,7 @@ class WorkflowSummaryResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    duration_ms: int | None = None
 
     model_config = {"from_attributes": True}
 

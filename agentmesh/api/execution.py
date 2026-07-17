@@ -84,6 +84,7 @@ async def workflow_status_endpoint(
         "error_message": workflow.error_message,
         "started_at": workflow.started_at.isoformat() if workflow.started_at else None,
         "completed_at": workflow.completed_at.isoformat() if workflow.completed_at else None,
+        "duration_ms": workflow.duration_ms,
         "tasks": [
             {
                 "task_key": t.task_key,
